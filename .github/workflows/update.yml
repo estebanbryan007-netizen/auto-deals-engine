@@ -1,0 +1,26 @@
+name: Update Deals
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - run: node update_deals.js
+
+      - name: Commit updated deals
+        run: |
+          git config user.name "auto-bot"
+          git config user.email "bot@github.com"
+          git add deals.json
+          git commit -m "Auto update deals" || echo "No changes"
+          git push

@@ -2,32 +2,21 @@ name: Update Deals
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/30 * * * *"
 
 jobs:
   update:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install dependencies
         run: npm install
 
       - name: Run deal scraper
         run: node update_deals.js
-
-      - name: Commit updated deals
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add deals.json
-          git commit -m "Auto update deals" || echo "No changes"
-          git push

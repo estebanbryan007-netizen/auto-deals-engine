@@ -1,68 +1,66 @@
-const fs = require("fs");
-const axios = require("axios");
-const cheerio = require("cheerio");
-const xml2js = require("xml2js");
+import axios from "axios";
+import cheerio from "cheerio";
+import fs from "fs";
 
-const OUTPUT = "deals.json";
+const TARGET_URL = "https://www.amazon.com/gp/goldbox"; // example deals page
 
-const FEEDS = [
-  { store: "amazon", rss: "https://slickdeals.net/newsearch.php?rss=1&q=amazon" },
-  { store: "walmart", rss: "https://slickdeals.net/newsearch.php?rss=1&q=walmart" }
-];
+const BASE_URL = "https://www.amazon.com";
 
-async function getProductData(url) {
+async function scrapeDeals() {
   try {
-    const { data } = await axios.get(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      timeout: 15000
+    const { data } = await axios.get(TARGET_URL, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+      },
     });
 
     const $ = cheerio.load(data);
-    const image = $('meta[property="og:image"]').attr("content");
-    return image || null;
-  } catch {
-    return null;
-  }
-}
 
-async function run() {
-  const parser = new xml2js.Parser();
-  let deals = [];
+    const deals = [];
 
-  for (const feed of FEEDS) {
-    const rss = await axios.get(feed.rss);
-    const parsed = await parser.parseStringPromise(rss.data);
+    $("a[href*='/dp/']").each((i, el) => {
+      if (deals.length >= 20) return; // limit results
 
-    const items = parsed.rss.channel[0].item || [];
+      let href = $(el).attr("href");
+      if (!href) return;
 
-    for (const item of items) {
-      const title = item.title[0];
-      const link = item.link[0];
+      // Clean Amazon links
+      href = href.split("?")[0];
 
-      const prices = title.match(/\$[0-9]+(\.[0-9]{2})?/g);
-      if (!prices || prices.length < 2) continue;
+      // Ensure full URL
+      if (!href.startsWith("http")) {
+        href = BASE_URL + href;
+      }
 
-      const oldPrice = parseFloat(prices[0].replace("$", ""));
-      const price = parseFloat(prices[1].replace("$", ""));
-      const discount = Math.round(((oldPrice - price) / oldPrice) * 100);
-
-      if (discount < 20) continue;
-
-      const image = await getProductData(link);
+      const title =
+        $(el).find("img").attr("alt") ||
+        $(el).text().trim() ||
+        "Amazon Deal";
 
       deals.push({
         title,
-        price,
-        oldPrice,
-        discount,
-        store: feed.store,
-        image,
-        url: link
+        url: href,
       });
-    }
-  }
+    });
 
-  fs.writeFileSync(OUTPUT, JSON.stringify(deals.slice(0, 30), null, 2));
+    if (deals.length === 0) {
+      console.log("No deals found.");
+      process.exit(0);
+    }
+
+    // Save output (or use however your site consumes it)
+    fs.writeFileSync("deals.json", JSON.stringify(deals, null, 2));
+
+    console.log(`✅ Found ${deals.length} deals`);
+    deals.forEach((d, i) => {
+      console.log(`${i + 1}. ${d.title}`);
+      console.log(d.url);
+    });
+  } catch (err) {
+    console.error("❌ Scrape failed:", err.message);
+    process.exit(1);
+  }
 }
 
-run();
+scrapeDeals();

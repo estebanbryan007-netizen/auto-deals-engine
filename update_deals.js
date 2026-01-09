@@ -1,50 +1,68 @@
 const fs = require("fs");
+const https = require("https");
+const xml2js = require("xml2js");
 
-// THIS IS WHERE HOSTINGER DEALS.JSON WILL LIVE
 const OUTPUT = "deals.json";
 
-// 🔥 SAMPLE AUTO DATA (later replaced with real feeds)
-function getProducts() {
-  return [
-    {
-      title: "PlayStation 5 Console",
-      current: 449,
-      old: 499,
-      category: "gaming",
-      image: "https://i.imgur.com/6XQJq8b.png",
-      url: "https://www.walmart.com"
-    },
-    {
-      title: "Apple AirPods Pro 2",
-      current: 189,
-      old: 249,
-      category: "electronics",
-      image: "https://i.imgur.com/y6Z8ZJH.png",
-      url: "https://www.amazon.com"
-    }
-  ];
+// Live deal feeds that track Walmart + Amazon price drops
+const FEEDS = [
+  {
+    source: "Walmart",
+    url: "https://slickdeals.net/newsearch.php?searcharea=deals&searchin=first&rss=1&q=walmart"
+  },
+  {
+    source: "Amazon",
+    url: "https://slickdeals.net/newsearch.php?searcharea=deals&searchin=first&rss=1&q=amazon"
+  }
+];
+
+function fetchRSS(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, res => {
+      let data = "";
+      res.on("data", chunk => (data += chunk));
+      res.on("end", () => resolve(data));
+    }).on("error", reject);
+  });
 }
 
-function detectDeals(products, minDiscount = 20) {
-  return products
-    .map(p => {
-      const discount = Math.round(((p.old - p.current) / p.old) * 100);
-      return { ...p, discount };
-    })
-    .filter(p => p.discount >= minDiscount)
-    .map(p => ({
-      title: p.title,
-      price: p.current,
-      oldPrice: p.old,
-      discount: p.discount,
-      category: p.category,
-      image: p.image,
-      url: p.url
-    }));
+async function parseDeals() {
+  const parser = new xml2js.Parser();
+  let deals = [];
+
+  for (const feed of FEEDS) {
+    const xml = await fetchRSS(feed.url);
+    const parsed = await parser.parseStringPromise(xml);
+
+    const items = parsed.rss.channel[0].item || [];
+
+    items.forEach(item => {
+      const title = item.title[0];
+      const link = item.link[0];
+
+      const priceMatch = title.match(/\$([0-9]+(\.[0-9]{2})?)/g);
+      if (!priceMatch || priceMatch.length < 2) return;
+
+      const oldPrice = parseFloat(priceMatch[0].replace("$", ""));
+      const price = parseFloat(priceMatch[1].replace("$", ""));
+
+      const discount = Math.round(((oldPrice - price) / oldPrice) * 100);
+      if (discount < 20) return;
+
+      deals.push({
+        title,
+        price,
+        oldPrice,
+        discount,
+        category: feed.source.toLowerCase(),
+        image: "https://i.imgur.com/6XQJq8b.png",
+        url: link
+      });
+    });
+  }
+
+  fs.writeFileSync(OUTPUT, JSON.stringify(deals.slice(0, 25), null, 2));
+  console.log(`Saved ${deals.length} live deals`);
 }
 
-const products = getProducts();
-const deals = detectDeals(products);
-
-fs.writeFileSync(OUTPUT, JSON.stringify(deals, null, 2));
-console.log("Updated deals.json");
+parseDeals();

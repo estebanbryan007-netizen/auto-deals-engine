@@ -1,22 +1,25 @@
-name: Update Deals
+name: Run Walmart Scraper
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # This allows you to run it manually from GitHub's Actions tab
 
 jobs:
-  update:
+  scrape:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: '20'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Run the Walmart scraper
+        run: node walmart_scraper.js  # This runs your script
 
-      - name: Run deal scraper
-        run: node update_deals.js
+      - name: Save output
+        run: |
+          # Here you can save the output to a file or commit it back to the repo if needed
+          node your_script_that_saves_output.js
